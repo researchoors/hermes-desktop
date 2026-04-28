@@ -1,5 +1,7 @@
 import { app, BrowserWindow } from "electron";
 import path from "path";
+import fs from "fs";
+import os from "os";
 import { startServer, stopServer } from "./server";
 import { createTray } from "./tray";
 import { createMenus } from "./menus";
@@ -43,7 +45,14 @@ async function bootstrap() {
 
     createTray(mainWindow, gatewayInfo);
 
-    mainWindow.loadURL(`http://127.0.0.1:${serverPort}`);
+    let loadUrl = `http://127.0.0.1:${serverPort}`;
+    const tokenFile = path.join(os.homedir(), ".hermes-web-ui", ".token");
+    try {
+      const token = fs.readFileSync(tokenFile, "utf-8").trim();
+      if (token) loadUrl += `/#/?token=${token}`;
+    } catch {}
+
+    mainWindow.loadURL(loadUrl);
 
     mainWindow.on("closed", () => {
       mainWindow = null;
