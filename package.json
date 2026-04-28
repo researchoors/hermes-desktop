@@ -1,0 +1,32 @@
+{
+  "name": "hermes-web-ui-electron",
+  "version": "0.1.0",
+  "description": "Hermes Agent desktop app — Electron wrapper for hermes-web-ui",
+  "main": "dist/main/index.js",
+  "scripts": {
+    "dev": "tsc && electron .",
+    "start": "electron .",
+    "build": "tsc",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder",
+    "dist:mac": "electron-builder --mac",
+    "dist:win": "electron-builder --win",
+    "dist:linux": "electron-builder --linux"
+  },
+  "dependencies": {
+    "hermes-web-ui": "^0.4.9",
+    "electron-updater": "^6.3.9"
+  },
+  "devDependencies": {
+    "electron": "^34.0.0",
+    "electron-builder": "^25.1.8",
+    "typescript": "^5.7.0",
+    "@types/node": "^22.0.0"
+  },
+  "author": "hankbobtheresearchoor",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hankbobtheresearchoor/hermes-web-ui-electron.git"
+  }
+}
