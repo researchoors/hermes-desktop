@@ -9,39 +9,53 @@ import { initSettingsIPC, openSettingsWindow } from "./settings";
 
 let mainWindow: BrowserWindow | null = null;
 let serverPort: number | null = null;
+let bootstrapped = false;
+let bootstrapping = false;
 
 async function bootstrap() {
-  const gatewayInfo = await discoverGateway();
+  if (bootstrapping) return;
+  bootstrapping = true;
 
-  serverPort = await startServer();
+  try {
+    const gatewayInfo = await discoverGateway();
 
-  createMenus(mainWindow);
+    serverPort = await startServer();
 
-  mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 800,
-    minWidth: 900,
-    minHeight: 600,
-    title: "Hermes Agent",
-    titleBarStyle: process.platform === "darwin" ? "hiddenInset" : undefined,
-    webPreferences: {
-      preload: path.join(__dirname, "..", "preload", "index.js"),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: false,
-    },
-  });
+    createMenus(mainWindow);
 
-  initTerminalIPC(mainWindow);
-  initSettingsIPC(mainWindow);
+    mainWindow = new BrowserWindow({
+      width: 1280,
+      height: 800,
+      minWidth: 900,
+      minHeight: 600,
+      title: "Hermes Agent",
+      titleBarStyle: process.platform === "darwin" ? "hiddenInset" : undefined,
+      webPreferences: {
+        preload: path.join(__dirname, "..", "preload", "index.js"),
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: false,
+      },
+    });
 
-  createTray(mainWindow, gatewayInfo);
+    initTerminalIPC(mainWindow);
+    initSettingsIPC(mainWindow);
 
-  mainWindow.loadURL(`http://127.0.0.1:${serverPort}`);
+    createTray(mainWindow, gatewayInfo);
 
-  mainWindow.on("closed", () => {
-    mainWindow = null;
-  });
+    mainWindow.loadURL(`http://127.0.0.1:${serverPort}`);
+
+    mainWindow.on("closed", () => {
+      mainWindow = null;
+      bootstrapped = false;
+    });
+
+    bootstrapped = true;
+  } catch (err) {
+    console.error("Bootstrap failed:", err);
+  } finally {
+    bootstrapping = false;
+  }
 }
 
 const gotLock = app.requestSingleInstanceLock();
@@ -64,7 +78,7 @@ app.on("window-all-closed", () => {
 });
 
 app.on("activate", () => {
-  if (mainWindow === null) {
+  if (!bootstrapped && !bootstrapping) {
     bootstrap();
   }
 });

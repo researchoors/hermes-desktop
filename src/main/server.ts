@@ -1,9 +1,9 @@
 import { spawn, ChildProcess, execSync } from "child_process";
-import http from "http";
+import net from "net";
 import path from "path";
 import fs from "fs";
 import os from "os";
-import { loadSettings, Settings } from "./settings";
+import { loadSettings } from "./settings";
 
 let child: ChildProcess | null = null;
 
@@ -35,25 +35,54 @@ function getRandomPort(): number {
   return 10000 + Math.floor(Math.random() * 50000);
 }
 
-function waitForHealth(port: number, timeoutMs = 15000): Promise<void> {
+function waitForPort(port: number, timeoutMs = 15000): Promise<void> {
   const start = Date.now();
   return new Promise((resolve, reject) => {
-    function poll() {
+    function probe() {
       if (Date.now() - start > timeoutMs) {
-        return reject(new Error(`Server not healthy on port ${port} after ${timeoutMs}ms`));
+        return reject(new Error(`Server never listened on port ${port} after ${timeoutMs}ms`));
       }
-      const req = http.get(`http://127.0.0.1:${port}/health`, (res) => {
-        res.resume();
-        if (res.statusCode === 200 || res.statusCode === 302) {
-          resolve();
-        } else {
-          setTimeout(poll, 300);
-        }
+      const sock = net.createConnection({ host: "127.0.0.1", port }, () => {
+        sock.destroy();
+        resolve();
       });
-      req.on("error", () => setTimeout(poll, 300));
-      req.setTimeout(2000, () => { req.destroy(); setTimeout(poll, 300); });
+      sock.on("error", () => setTimeout(probe, 300));
+      sock.setTimeout(2000, () => { sock.destroy(); setTimeout(probe, 300); });
     }
-    setTimeout(poll, 300);
+    setTimeout(probe, 300);
+  });
+}
+
+function waitForListening(stdoutStream: NodeJS.ReadableStream, timeoutMs = 15000): Promise<number> {
+  return new Promise((resolve, reject) => {
+    let buf = "";
+    const timer = setTimeout(() => {
+      reject(new Error("Server did not print 'listening on port' within timeout"));
+    }, timeoutMs);
+
+    function onData(data: Buffer) {
+      buf += data.toString();
+      const match = buf.match(/listening on port (\d+)/);
+      if (match) {
+        clearTimeout(timer);
+        cleanup();
+        resolve(parseInt(match[1], 10));
+      }
+    }
+
+    function cleanup() {
+      stdoutStream.off("data", onData);
+      stdoutStream.off("close", onEarlyExit);
+    }
+
+    function onEarlyExit() {
+      clearTimeout(timer);
+      cleanup();
+      reject(new Error("Server process exited before printing listening port"));
+    }
+
+    stdoutStream.on("data", onData);
+    stdoutStream.on("close", onEarlyExit);
   });
 }
 
@@ -106,22 +135,13 @@ export async function startServer(): Promise<number> {
 
   const nodeBin = findNodeBinary();
 
-  let resolvedPort = port;
-  let stdoutBuf = "";
-
   child = spawn(nodeBin, [serverEntry], {
     env,
     stdio: ["ignore", "pipe", "pipe"],
   });
 
   child.stdout?.on("data", (data: Buffer) => {
-    const chunk = data.toString();
-    stdoutBuf += chunk;
-    process.stdout.write(chunk);
-    const match = stdoutBuf.match(/listening on port (\d+)/);
-    if (match) {
-      resolvedPort = parseInt(match[1], 10);
-    }
+    process.stdout.write(data);
   });
 
   child.stderr?.on("data", (data: Buffer) => {
@@ -135,13 +155,9 @@ export async function startServer(): Promise<number> {
     child = null;
   });
 
-  await new Promise<void>((resolve, reject) => {
-    child?.on("spawn", () => resolve());
-    child?.on("error", reject);
-  });
-
-  await waitForHealth(resolvedPort, 15000);
-  return resolvedPort;
+  const listeningPort = await waitForListening(child.stdout!, 15000);
+  await waitForPort(listeningPort, 5000);
+  return listeningPort;
 }
 
 export function stopServer(): void {
