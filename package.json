@@ -4,9 +4,9 @@
   "description": "Hermes Agent desktop app — Electron wrapper for hermes-web-ui",
   "main": "dist/main/index.js",
   "scripts": {
-    "dev": "/opt/homebrew/bin/node ./node_modules/.bin/tsc && /opt/homebrew/bin/node ./node_modules/.bin/electron .",
-    "start": "/opt/homebrew/bin/node ./node_modules/.bin/electron .",
-    "build": "/opt/homebrew/bin/node ./node_modules/.bin/tsc",
+    "dev": "npx tsc && npx electron .",
+    "start": "npx electron .",
+    "build": "npx tsc",
     "pack": "electron-builder --dir",
     "dist": "electron-builder",
     "dist:mac": "electron-builder --mac",
