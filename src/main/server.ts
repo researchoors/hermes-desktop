@@ -53,10 +53,11 @@ function waitForPort(port: number, timeoutMs = 15000): Promise<void> {
   });
 }
 
-function waitForListening(stdoutStream: NodeJS.ReadableStream, timeoutMs = 15000): Promise<number> {
+function waitForListening(streams: NodeJS.ReadableStream[], timeoutMs = 15000): Promise<number> {
   return new Promise((resolve, reject) => {
     let buf = "";
     const timer = setTimeout(() => {
+      cleanup();
       reject(new Error("Server did not print 'listening on port' within timeout"));
     }, timeoutMs);
 
@@ -71,8 +72,10 @@ function waitForListening(stdoutStream: NodeJS.ReadableStream, timeoutMs = 15000
     }
 
     function cleanup() {
-      stdoutStream.off("data", onData);
-      stdoutStream.off("close", onEarlyExit);
+      for (const s of streams) {
+        s.off("data", onData);
+        s.off("close", onEarlyExit);
+      }
     }
 
     function onEarlyExit() {
@@ -81,8 +84,10 @@ function waitForListening(stdoutStream: NodeJS.ReadableStream, timeoutMs = 15000
       reject(new Error("Server process exited before printing listening port"));
     }
 
-    stdoutStream.on("data", onData);
-    stdoutStream.on("close", onEarlyExit);
+    for (const s of streams) {
+      s.on("data", onData);
+      s.on("close", onEarlyExit);
+    }
   });
 }
 
@@ -155,7 +160,7 @@ export async function startServer(): Promise<number> {
     child = null;
   });
 
-  const listeningPort = await waitForListening(child.stdout!, 15000);
+  const listeningPort = await waitForListening([child.stdout!, child.stderr!], 15000);
   await waitForPort(listeningPort, 5000);
   return listeningPort;
 }
