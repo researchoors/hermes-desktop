@@ -12,7 +12,7 @@ const CONFIG_DIR = path.join(os.homedir(), ".hermes-web-ui-electron");
 const CONFIG_FILE = path.join(CONFIG_DIR, "settings.json");
 
 const DEFAULTS: Settings = {
-  gatewayUrl: "https://gateway.model-optimizors.com",
+  gatewayUrl: "https://chat.model-optimizors.com",
   gatewayApiKey: "",
 };
 
