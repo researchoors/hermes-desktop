@@ -23,8 +23,6 @@ async function bootstrap() {
 
     serverPort = await startServer();
 
-    createMenus(mainWindow);
-
     mainWindow = new BrowserWindow({
       width: 1280,
       height: 800,
@@ -39,6 +37,8 @@ async function bootstrap() {
         sandbox: false,
       },
     });
+
+    createMenus(mainWindow);
 
     initTerminalIPC(mainWindow);
     initSettingsIPC(mainWindow);
