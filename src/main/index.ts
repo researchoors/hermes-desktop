@@ -1,27 +1,27 @@
 import { app, BrowserWindow } from "electron";
 import path from "path";
-import fs from "fs";
-import os from "os";
-import { startServer, stopServer } from "./server";
 import { createTray } from "./tray";
 import { createMenus } from "./menus";
-import { initTerminalIPC } from "./terminal";
-import { discoverGateway } from "./gateway";
-import { initSettingsIPC, openSettingsWindow } from "./settings";
+import { initSettingsIPC, loadSettings, openSettingsWindow } from "./settings";
 
 let mainWindow: BrowserWindow | null = null;
-let serverPort: number | null = null;
 let bootstrapped = false;
 let bootstrapping = false;
+
+function getLoadUrl(settings: { gatewayUrl: string; gatewayApiKey: string }): string {
+  const url = new URL(settings.gatewayUrl);
+  if (settings.gatewayApiKey) {
+    url.searchParams.set("token", settings.gatewayApiKey);
+  }
+  return url.toString();
+}
 
 async function bootstrap() {
   if (bootstrapping) return;
   bootstrapping = true;
 
   try {
-    const gatewayInfo = await discoverGateway();
-
-    serverPort = await startServer();
+    const settings = loadSettings();
 
     mainWindow = new BrowserWindow({
       width: 1280,
@@ -39,20 +39,10 @@ async function bootstrap() {
     });
 
     createMenus(mainWindow);
-
-    initTerminalIPC(mainWindow);
     initSettingsIPC(mainWindow);
+    createTray(mainWindow);
 
-    createTray(mainWindow, gatewayInfo);
-
-    let loadUrl = `http://127.0.0.1:${serverPort}`;
-    const tokenFile = path.join(os.homedir(), ".hermes-web-ui", ".token");
-    try {
-      const token = fs.readFileSync(tokenFile, "utf-8").trim();
-      if (token) loadUrl += `/#/?token=${token}`;
-    } catch {}
-
-    mainWindow.loadURL(loadUrl);
+    mainWindow.loadURL(getLoadUrl(settings));
 
     mainWindow.on("closed", () => {
       mainWindow = null;
@@ -90,8 +80,4 @@ app.on("activate", () => {
   if (!bootstrapped && !bootstrapping) {
     bootstrap();
   }
-});
-
-app.on("before-quit", () => {
-  stopServer();
 });

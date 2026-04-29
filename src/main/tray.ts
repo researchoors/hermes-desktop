@@ -3,7 +3,7 @@ import path from "path";
 import fs from "fs";
 import { openSettingsWindow } from "./settings";
 
-export function createTray(mainWindow: BrowserWindow, gatewayInfo: any) {
+export function createTray(mainWindow: BrowserWindow) {
   const iconPath = path.join(__dirname, "..", "..", "resources", "icon.png");
   let icon: Electron.NativeImage;
   if (fs.existsSync(iconPath)) {
@@ -19,11 +19,6 @@ export function createTray(mainWindow: BrowserWindow, gatewayInfo: any) {
   const contextMenu = Menu.buildFromTemplate([
     { label: "Open Hermes", click: () => mainWindow.show() },
     { label: "Settings...", click: () => openSettingsWindow(mainWindow) },
-    { type: "separator" },
-    {
-      label: gatewayInfo?.running ? "Gateway: Running" : "Gateway: Not Found",
-      enabled: false,
-    },
     { type: "separator" },
     { label: "Quit", click: () => mainWindow.close() },
   ]);

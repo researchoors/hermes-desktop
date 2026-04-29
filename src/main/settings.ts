@@ -1,21 +1,19 @@
-import fs from "fs";
+import { ipcMain, BrowserWindow } from "electron";
 import path from "path";
+import fs from "fs";
 import os from "os";
-import { ipcMain, BrowserWindow, dialog } from "electron";
 
 export interface Settings {
   gatewayUrl: string;
   gatewayApiKey: string;
-  disableAuth: boolean;
 }
 
 const CONFIG_DIR = path.join(os.homedir(), ".hermes-web-ui-electron");
 const CONFIG_FILE = path.join(CONFIG_DIR, "settings.json");
 
 const DEFAULTS: Settings = {
-  gatewayUrl: "http://127.0.0.1:8642",
+  gatewayUrl: "https://gateway.model-optimizors.com",
   gatewayApiKey: "",
-  disableAuth: false,
 };
 
 export function loadSettings(): Settings {
@@ -35,7 +33,11 @@ export function saveSettings(settings: Partial<Settings>): Settings {
   return merged;
 }
 
+let mainWindowRef: BrowserWindow | null = null;
+
 export function initSettingsIPC(mainWindow: BrowserWindow): void {
+  mainWindowRef = mainWindow;
+
   ipcMain.handle("settings:get", () => {
     const s = loadSettings();
     return {
@@ -44,13 +46,22 @@ export function initSettingsIPC(mainWindow: BrowserWindow): void {
     };
   });
 
-  ipcMain.handle("settings:save", (_event, settings: Partial<Settings>) => {
+  ipcMain.handle("settings:save", async (_event, settings: Partial<Settings>) => {
     const incoming = { ...settings };
     if (incoming.gatewayApiKey === "••••••••") {
       const current = loadSettings();
       incoming.gatewayApiKey = current.gatewayApiKey;
     }
     const saved = saveSettings(incoming);
+
+    if (mainWindowRef && !mainWindowRef.isDestroyed()) {
+      const url = new URL(saved.gatewayUrl);
+      if (saved.gatewayApiKey) {
+        url.searchParams.set("token", saved.gatewayApiKey);
+      }
+      mainWindowRef.loadURL(url.toString());
+    }
+
     return {
       ...saved,
       gatewayApiKey: saved.gatewayApiKey ? "••••••••" : "",
@@ -58,7 +69,7 @@ export function initSettingsIPC(mainWindow: BrowserWindow): void {
   });
 
   ipcMain.handle("settings:openWindow", () => {
-    openSettingsWindow(mainWindow);
+    if (mainWindowRef) openSettingsWindow(mainWindowRef);
   });
 }
 
@@ -72,13 +83,13 @@ export function openSettingsWindow(parent: BrowserWindow): void {
 
   settingsWindow = new BrowserWindow({
     width: 520,
-    height: 440,
+    height: 400,
     resizable: false,
     minimizable: false,
     maximizable: false,
     title: "Hermes Agent — Settings",
     parent,
-    modal: true,
+    modal: false,
     webPreferences: {
       preload: path.join(__dirname, "..", "preload", "index.js"),
       contextIsolation: true,
@@ -87,7 +98,10 @@ export function openSettingsWindow(parent: BrowserWindow): void {
     },
   });
 
-  settingsWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(SETTINGS_HTML)}`);
+  const htmlPath = path.join(os.homedir(), ".hermes-web-ui-electron", "settings.html");
+  fs.mkdirSync(path.dirname(htmlPath), { recursive: true });
+  fs.writeFileSync(htmlPath, SETTINGS_HTML, "utf-8");
+  settingsWindow.loadFile(htmlPath);
 
   settingsWindow.on("closed", () => {
     settingsWindow = null;
@@ -109,13 +123,8 @@ const SETTINGS_HTML = `<!DOCTYPE html>
     background: #16213e; color: #e0e0e0; font-size: 14px; margin-bottom: 16px; outline: none;
   }
   input:focus { border-color: #6c63ff; }
-  .checkbox-row { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
-  .checkbox-row input { width: 18px; height: 18px; accent-color: #6c63ff; }
-  .checkbox-row label { margin-bottom: 0; font-weight: 400; color: #e0e0e0; }
   .btn-row { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
-  button {
-    padding: 8px 20px; border-radius: 6px; border: none; font-size: 14px; cursor: pointer;
-  }
+  button { padding: 8px 20px; border-radius: 6px; border: none; font-size: 14px; cursor: pointer; }
   .btn-save { background: #6c63ff; color: #fff; }
   .btn-save:hover { background: #5a52e0; }
   .btn-cancel { background: #333355; color: #ccc; }
@@ -128,21 +137,16 @@ const SETTINGS_HTML = `<!DOCTYPE html>
 <h2>Gateway Settings</h2>
 
 <label for="gatewayUrl">Gateway URL</label>
-<input type="text" id="gatewayUrl" placeholder="http://127.0.0.1:8642" />
-<div class="hint">The Hermes Agent gateway endpoint. Can be a remote URL (e.g. https://gateway.example.com)</div>
+<input type="text" id="gatewayUrl" placeholder="https://gateway.example.com" />
+<div class="hint">The remote Hermes Agent gateway endpoint</div>
 
 <label for="gatewayApiKey">API Key</label>
 <input type="password" id="gatewayApiKey" placeholder="sk-..." />
-<div class="hint">Used for Bearer authentication to the gateway. Written to ~/.hermes/.env as API_SERVER_KEY</div>
-
-<div class="checkbox-row">
-  <input type="checkbox" id="disableAuth" />
-  <label for="disableAuth">Disable local auth (no login token required)</label>
-</div>
+<div class="hint">Bearer token for gateway authentication (optional)</div>
 
 <div class="btn-row">
   <button class="btn-cancel" onclick="window.close()">Cancel</button>
-  <button class="btn-save" onclick="save()">Save &amp; Restart</button>
+  <button class="btn-save" onclick="save()">Save &amp; Connect</button>
 </div>
 <div class="status" id="status"></div>
 
@@ -153,7 +157,6 @@ async function load() {
   const s = await api.settings.get();
   document.getElementById('gatewayUrl').value = s.gatewayUrl || '';
   document.getElementById('gatewayApiKey').value = s.gatewayApiKey || '';
-  document.getElementById('disableAuth').checked = !!s.disableAuth;
 }
 
 async function save() {
@@ -161,11 +164,10 @@ async function save() {
   const s = {
     gatewayUrl: el('gatewayUrl').value.trim(),
     gatewayApiKey: el('gatewayApiKey').value,
-    disableAuth: el('disableAuth').checked,
   };
   await api.settings.save(s);
-  el('status').textContent = 'Saved. Restart the app to apply changes.';
-  setTimeout(() => window.close(), 1200);
+  el('status').textContent = 'Saved. Connecting...';
+  setTimeout(() => window.close(), 1000);
 }
 
 load();
