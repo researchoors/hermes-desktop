@@ -55,11 +55,12 @@ export function initSettingsIPC(mainWindow: BrowserWindow): void {
     const saved = saveSettings(incoming);
 
     if (mainWindowRef && !mainWindowRef.isDestroyed()) {
-      const url = new URL(saved.gatewayUrl);
+      const baseUrl = saved.gatewayUrl.replace(/\/+$/, "");
+      let loadUrl = `${baseUrl}/`;
       if (saved.gatewayApiKey) {
-        url.searchParams.set("token", saved.gatewayApiKey);
+        loadUrl = `${baseUrl}/#/?token=${saved.gatewayApiKey}`;
       }
-      mainWindowRef.loadURL(url.toString());
+      mainWindowRef.loadURL(loadUrl);
     }
 
     return {
@@ -140,9 +141,9 @@ const SETTINGS_HTML = `<!DOCTYPE html>
 <input type="text" id="gatewayUrl" placeholder="https://gateway.example.com" />
 <div class="hint">The remote Hermes Agent gateway endpoint</div>
 
-<label for="gatewayApiKey">API Key</label>
-<input type="password" id="gatewayApiKey" placeholder="sk-..." />
-<div class="hint">Bearer token for gateway authentication (optional)</div>
+<label for="gatewayApiKey">Auth Token</label>
+<input type="password" id="gatewayApiKey" placeholder="Paste token from ~/.hermes-web-ui/.token" />
+<div class="hint">Authentication token for the web UI (found in ~/.hermes-web-ui/.token)</div>
 
 <div class="btn-row">
   <button class="btn-cancel" onclick="window.close()">Cancel</button>

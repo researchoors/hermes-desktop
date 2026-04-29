@@ -9,11 +9,11 @@ let bootstrapped = false;
 let bootstrapping = false;
 
 function getLoadUrl(settings: { gatewayUrl: string; gatewayApiKey: string }): string {
-  const url = new URL(settings.gatewayUrl);
+  const baseUrl = settings.gatewayUrl.replace(/\/+$/, "");
   if (settings.gatewayApiKey) {
-    url.searchParams.set("token", settings.gatewayApiKey);
+    return `${baseUrl}/#/?token=${settings.gatewayApiKey}`;
   }
-  return url.toString();
+  return `${baseUrl}/`;
 }
 
 async function bootstrap() {
